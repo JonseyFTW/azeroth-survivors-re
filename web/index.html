@@ -1,5 +1,6 @@
 <!doctype html>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Azeroth Survivors</title>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <style>
@@ -36,6 +37,14 @@
       window.addEventListener(ev, resume, { capture: true, passive: true });
     }
   })();
+</script>
+<script>
+  // iPhone: a canvas has neither requestFullscreen nor webkitRequestFullscreen there, and
+  // winit's fullscreen fallback calls the latter unconditionally — the client then panics at
+  // boot ("arg0.webkitRequestFullscreen is not a function"). A no-op keeps it windowed.
+  if (!HTMLCanvasElement.prototype.requestFullscreen && !HTMLCanvasElement.prototype.webkitRequestFullscreen) {
+    HTMLCanvasElement.prototype.webkitRequestFullscreen = function () {};
+  }
 </script>
 <script type="importmap">{"imports":{"wasi_snapshot_preview1":"./wasi_stubs.js"}}</script>
 <script>
@@ -81,6 +90,11 @@
   import('./platform.js')
     .then(({ requestPersistentStorage }) => requestPersistentStorage())
     .catch((e) => console.warn('platform.js:', e));
+  // Phone controls (web/touch.js): a joystick + F + pause over the canvas, only on coarse-pointer
+  // devices (or `?touch=1`). Dynamic, never load-bearing, same posture as platform.js.
+  import('./touch.js')
+    .then((m) => m.install())
+    .catch((e) => console.warn('touch.js:', e));
   // The JavaScript bridge (web/bridge.js, `window.wenilla` in the console): live game state
   // out, commands in, the hidden-tab keepalive. Dynamic, never load-bearing. `?bridge=hud` /
   // `?bridge=idle` mount an example from web/examples/ on top; `?bridge=0` turns it off.
