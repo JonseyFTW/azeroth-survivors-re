@@ -52,6 +52,10 @@
     const q = new URLSearchParams(location.search);
     if (!q.has('render_scale')) q.set('render_scale', '0.5');
     if (!q.has('grade')) q.set('grade', '0');
+    // Memory: iOS kills the tab after a few minutes of play. The terrain residency ring is
+    // derived from `farclip` (177..777, default 350); its minimum keeps ~40 % of the tiles, and a
+    // top-down camera that zooms out to 70 yd never sees past it.
+    if (!q.has('farclip')) q.set('farclip', '177');
     history.replaceState(null, '', `${location.pathname}?${q}${location.hash}`);
   }
 </script>
