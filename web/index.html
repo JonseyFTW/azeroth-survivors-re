@@ -45,20 +45,23 @@
   if (!HTMLCanvasElement.prototype.requestFullscreen && !HTMLCanvasElement.prototype.webkitRequestFullscreen) {
     HTMLCanvasElement.prototype.webkitRequestFullscreen = function () {};
   }
-  // Phones: render the world at half the canvas resolution (a DPR-3 phone otherwise draws
-  // ~3 megapixels a frame) and start the picture polish off. Both are the client's own query
-  // levers (`?render_scale=`, `?grade=`, read via webenv.rs at boot), so set them before it.
+  // Phones: lighter defaults, because iOS kills the tab once it holds too much memory. Every
+  // key is one the client reads from the query at boot (webenv.rs): `render_scale` and `grade`
+  // directly, the rest as CVars (cvars/mod.rs), matched only in **lowercase**. A key already in
+  // the URL wins, so any of these can be put back by hand.
   if (matchMedia('(hover: none) and (pointer: coarse)').matches) {
+    const PHONE = {
+      render_scale: '0.5',   // world at half the canvas resolution (a DPR-3 phone: ~3 MP a frame)
+      grade: '0',            // sharpen/colour pass off
+      farclip: '177',        // terrain ring ±8 chunks instead of ±13 (~40 % of the tiles)
+      frilldensity: '8',     // ground clutter, default 32
+      enablemusic: '0',      // the web build decodes each track whole: tens of MB of PCM apiece
+      enableambience: '0',   // same, for the ambience loops
+      spelleffectlevel: '0', // fewer spell particles (0..2, default 2)
+      weatherdensity: '0',   // no precipitation
+    };
     const q = new URLSearchParams(location.search);
-    if (!q.has('render_scale')) q.set('render_scale', '0.5');
-    if (!q.has('grade')) q.set('grade', '0');
-    // Memory: iOS kills the tab after a few minutes of play. The terrain residency ring is
-    // derived from `farclip` (177..777, default 350); its minimum keeps ~40 % of the tiles, and a
-    // top-down camera that zooms out to 70 yd never sees past it.
-    if (!q.has('farclip')) q.set('farclip', '177');
-    // Ground clutter (`frillDensity`, panel stops 16/32/48, default 32): grass is instances the
-    // phone has to hold and draw; 8 keeps a little.
-    if (!q.has('frillDensity')) q.set('frillDensity', '8');
+    for (const [k, v] of Object.entries(PHONE)) if (!q.has(k)) q.set(k, v);
     history.replaceState(null, '', `${location.pathname}?${q}${location.hash}`);
   }
 </script>
