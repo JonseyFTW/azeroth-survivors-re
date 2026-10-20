@@ -184,20 +184,28 @@ export function install() {
 
   // ── viewport ──
   // iOS leaves the canvas at its old size after a rotation (the resize lands before the new
-  // viewport numbers do), so re-assert the visible viewport's size, and again once it settles.
+  // viewport numbers do), so re-assert the viewport's size once it settles — but only on a real
+  // orientation change: iOS also fires resizes for every toolbar slide, and each canvas resize
+  // makes the renderer rebuild its targets, which stalls the boot.
+  let portrait = innerHeight > innerWidth;
   const fit = () => {
-    const vv = window.visualViewport;
-    const w = Math.round(vv ? vv.width : innerWidth), h = Math.round(vv ? vv.height : innerHeight);
-    if (!w || !h) return;
+    const w = innerWidth, h = innerHeight;
+    const r = canvas.getBoundingClientRect();
+    if (!w || !h || (Math.abs(r.width - w) < 2 && Math.abs(r.height - h) < 2)) return;
     document.documentElement.style.height = `${h}px`;
     document.body.style.height = `${h}px`;
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
   };
-  const refit = () => { fit(); setTimeout(fit, 300); setTimeout(fit, 1000); };
+  const refit = () => {
+    const now = innerHeight > innerWidth;
+    if (now === portrait) return;
+    portrait = now;
+    setTimeout(fit, 300);
+    setTimeout(fit, 1000);
+  };
   window.addEventListener('resize', refit);
   window.addEventListener('orientationchange', refit);
-  window.visualViewport?.addEventListener('resize', refit);
 
   // ── buttons ──
   const press = (el, onDown, onUp) => {
