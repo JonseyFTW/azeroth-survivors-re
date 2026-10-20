@@ -101,7 +101,7 @@
     .catch((e) => console.warn('platform.js:', e));
   // Phone controls (web/touch.js): a joystick + F + pause over the canvas, only on coarse-pointer
   // devices (or `?touch=1`). Dynamic, never load-bearing, same posture as platform.js.
-  import('./touch.js')
+  import('./touch.js?v=3')
     .then((m) => m.install())
     .catch((e) => console.warn('touch.js:', e));
   // The JavaScript bridge (web/bridge.js, `window.wenilla` in the console): live game state
