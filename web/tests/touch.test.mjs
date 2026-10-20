@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { wantsTouch, stickKeys, aimPoint } from '../touch.js';
+import { wantsTouch, stickKeys, aimPoint, inStickArea } from '../touch.js';
+
+test('inStickArea: the stick side, below the top quarter', () => {
+  assert.equal(inStickArea(100, 400, 800, 600, 'left'), true);
+  assert.equal(inStickArea(700, 400, 800, 600, 'left'), false);
+  assert.equal(inStickArea(100, 100, 800, 600, 'left'), false);
+  assert.equal(inStickArea(700, 400, 800, 600, 'right'), true);
+  assert.equal(inStickArea(100, 400, 800, 600, 'right'), false);
+});
 
 test('wantsTouch: ?touch= overrides the media query', () => {
   assert.equal(wantsTouch('?touch=1', false), true);

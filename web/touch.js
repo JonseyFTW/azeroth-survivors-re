@@ -46,14 +46,19 @@ export function aimPoint(dx, dy, w, h) {
   return { x: w / 2 + (dx / len) * AIM, y: h / 2 + (dy / len) * AIM };
 }
 
+/** Does a touch at (x, y) on a w×h screen start the joystick? The stick side's lower 75 %. */
+export function inStickArea(x, y, w, h, side) {
+  const onSide = side === 'right' ? x > w / 2 : x < w / 2;
+  return onSide && y > h * 0.25;
+}
+
 const KEY = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyF: 'f', Escape: 'Escape' };
 
 const CSS = `
 #wenilla-touch{position:fixed;inset:0;z-index:10;pointer-events:none;visibility:hidden;
   color:#fff;font:bold 24px/1 system-ui,sans-serif;-webkit-user-select:none;user-select:none}
 #wenilla-touch.on{visibility:visible}
-#wenilla-touch .zone{position:absolute;left:0;right:50%;top:25%;bottom:0;pointer-events:auto;touch-action:none}
-#wenilla-touch.right .zone{left:50%;right:0}
+#wenilla-touch .zone{position:absolute;inset:0;pointer-events:auto;touch-action:none}
 #wenilla-touch .ring{position:absolute;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;
   border:2px solid rgba(255,255,255,.6);background:rgba(255,255,255,.15)}
 #wenilla-touch .knob{position:absolute;left:50%;top:50%;width:48px;height:48px;margin:-24px 0 0 -24px;
@@ -123,43 +128,76 @@ export function install() {
     });
   };
 
-  // ── joystick ──
-  let stick = null; // { id, x0, y0, t0, moved }
-  const own = (e) => stick && [...e.changedTouches].find((t) => t.identifier === stick.id);
+  let side = 'left';
+  try { side = localStorage.getItem(SIDE_KEY) === 'right' ? 'right' : 'left'; } catch (_) {}
+  root.classList.toggle('right', side === 'right');
+
+  // ── touches ──
+  // The zone covers the whole screen: the game never sees a finger directly (bevy's touch
+  // picking does not reach the glue menus), so every touch is either the joystick — one that
+  // starts in the stick area — or a tap, replayed as a click when it ends short and unmoved.
+  let stick = null;       // { id, x0, y0, t0, moved }
+  const taps = new Map(); // id → the same record, for every other finger
   zone.addEventListener('touchstart', (e) => {
     e.preventDefault();
-    if (stick) return;
-    const t = e.changedTouches[0];
-    stick = { id: t.identifier, x0: t.clientX, y0: t.clientY, t0: performance.now(), moved: false };
-    const z = zone.getBoundingClientRect();
-    ring.style.left = `${t.clientX - z.left}px`;
-    ring.style.top = `${t.clientY - z.top}px`;
-    knob.style.transform = '';
-    ring.hidden = false;
+    for (const t of e.changedTouches) {
+      const rec = { id: t.identifier, x0: t.clientX, y0: t.clientY, t0: performance.now(), moved: false };
+      if (!stick && inStickArea(t.clientX, t.clientY, innerWidth, innerHeight, side)) {
+        stick = rec;
+        ring.style.left = `${t.clientX}px`;
+        ring.style.top = `${t.clientY}px`;
+        knob.style.transform = '';
+        ring.hidden = false;
+      } else {
+        taps.set(t.identifier, rec);
+      }
+    }
   }, { passive: false });
   zone.addEventListener('touchmove', (e) => {
     e.preventDefault();
-    const t = own(e);
-    if (!t) return;
-    let dx = t.clientX - stick.x0, dy = t.clientY - stick.y0;
-    const len = Math.hypot(dx, dy);
-    if (len > RING) { dx *= RING / len; dy *= RING / len; }
-    knob.style.transform = `translate(${dx}px,${dy}px)`;
-    const codes = stickKeys(dx, dy);
-    if (codes.length) { stick.moved = true; aim(dx, dy); }
-    setHeld(codes);
+    for (const t of e.changedTouches) {
+      if (stick && t.identifier === stick.id) {
+        let dx = t.clientX - stick.x0, dy = t.clientY - stick.y0;
+        const len = Math.hypot(dx, dy);
+        if (len > RING) { dx *= RING / len; dy *= RING / len; }
+        knob.style.transform = `translate(${dx}px,${dy}px)`;
+        const codes = stickKeys(dx, dy);
+        if (codes.length) { stick.moved = true; aim(dx, dy); }
+        setHeld(codes);
+      } else {
+        const r = taps.get(t.identifier);
+        if (r && Math.hypot(t.clientX - r.x0, t.clientY - r.y0) >= DEAD) r.moved = true;
+      }
+    }
   }, { passive: false });
   const end = (e) => {
-    const t = own(e);
-    if (!t) return;
     e.preventDefault();
-    setHeld([]);
-    ring.hidden = true;
-    if (!stick.moved && performance.now() - stick.t0 < TAP_MS) tapThrough(stick.x0, stick.y0);
-    stick = null;
+    for (const t of e.changedTouches) {
+      const r = stick && t.identifier === stick.id ? stick : taps.get(t.identifier);
+      if (!r) continue;
+      if (r === stick) { setHeld([]); ring.hidden = true; stick = null; } else taps.delete(t.identifier);
+      if (!r.moved && performance.now() - r.t0 < TAP_MS) tapThrough(r.x0, r.y0);
+    }
   };
   zone.addEventListener('touchend', end, { passive: false });
   zone.addEventListener('touchcancel', end, { passive: false });
+
+  // ── viewport ──
+  // iOS leaves the canvas at its old size after a rotation (the resize lands before the new
+  // viewport numbers do), so re-assert the visible viewport's size, and again once it settles.
+  const fit = () => {
+    const vv = window.visualViewport;
+    const w = Math.round(vv ? vv.width : innerWidth), h = Math.round(vv ? vv.height : innerHeight);
+    if (!w || !h) return;
+    document.documentElement.style.height = `${h}px`;
+    document.body.style.height = `${h}px`;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+  };
+  const refit = () => { fit(); setTimeout(fit, 300); setTimeout(fit, 1000); };
+  window.addEventListener('resize', refit);
+  window.addEventListener('orientationchange', refit);
+  window.visualViewport?.addEventListener('resize', refit);
 
   // ── buttons ──
   const press = (el, onDown, onUp) => {
@@ -170,10 +208,6 @@ export function install() {
   };
   press(root.querySelector('.f'), () => key('keydown', 'KeyF'), () => key('keyup', 'KeyF'));
   press(root.querySelector('.pause'), null, () => { key('keydown', 'Escape'); key('keyup', 'Escape'); });
-
-  let side = 'left';
-  try { side = localStorage.getItem(SIDE_KEY) === 'right' ? 'right' : 'left'; } catch (_) {}
-  root.classList.toggle('right', side === 'right');
   press(root.querySelector('.swap'), null, () => {
     side = side === 'left' ? 'right' : 'left';
     root.classList.toggle('right', side === 'right');
@@ -193,6 +227,7 @@ export function install() {
     setHeld([]);
     ring.hidden = true;
     stick = null;
+    taps.clear();
   });
   console.log(`touch: controls on (stick ${side}); ?touch=0 turns them off`);
 }

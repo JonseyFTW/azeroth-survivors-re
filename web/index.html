@@ -45,6 +45,15 @@
   if (!HTMLCanvasElement.prototype.requestFullscreen && !HTMLCanvasElement.prototype.webkitRequestFullscreen) {
     HTMLCanvasElement.prototype.webkitRequestFullscreen = function () {};
   }
+  // Phones: render the world at half the canvas resolution (a DPR-3 phone otherwise draws
+  // ~3 megapixels a frame) and start the picture polish off. Both are the client's own query
+  // levers (`?render_scale=`, `?grade=`, read via webenv.rs at boot), so set them before it.
+  if (matchMedia('(hover: none) and (pointer: coarse)').matches) {
+    const q = new URLSearchParams(location.search);
+    if (!q.has('render_scale')) q.set('render_scale', '0.5');
+    if (!q.has('grade')) q.set('grade', '0');
+    history.replaceState(null, '', `${location.pathname}?${q}${location.hash}`);
+  }
 </script>
 <script type="importmap">{"imports":{"wasi_snapshot_preview1":"./wasi_stubs.js"}}</script>
 <script>
