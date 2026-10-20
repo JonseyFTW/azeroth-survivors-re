@@ -56,6 +56,9 @@
     // derived from `farclip` (177..777, default 350); its minimum keeps ~40 % of the tiles, and a
     // top-down camera that zooms out to 70 yd never sees past it.
     if (!q.has('farclip')) q.set('farclip', '177');
+    // Ground clutter (`frillDensity`, panel stops 16/32/48, default 32): grass is instances the
+    // phone has to hold and draw; 8 keeps a little.
+    if (!q.has('frillDensity')) q.set('frillDensity', '8');
     history.replaceState(null, '', `${location.pathname}?${q}${location.hash}`);
   }
 </script>
